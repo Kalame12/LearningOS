@@ -73,6 +73,7 @@ export async function POST(req: Request) {
     if (subjectList.length === 0) subjectList.push(goal || interest || "General Learning");
 
     const allRoadmaps: any[] = [];
+    let insertedStepCount = 0;
 
     for (const subject of subjectList) {
       // Delete old sessions for same subject + user to avoid duplicate tabs
@@ -90,11 +91,17 @@ export async function POST(req: Request) {
 
       const roadmap = await generateRoadmapForSubject(baseProfile, subject, provider, model);
 
-      const { data: session } = await supabaseServer
+      const { data: session, error: sessionError } = await supabaseServer
         .from("roadmap_sessions")
         .insert([{ user_id: baseProfile.userId, level: currentLevel, subject: subject.trim() }])
         .select()
         .single();
+      if (sessionError || !session?.id) {
+        return NextResponse.json(
+          { roadmap: [], message: sessionError?.message || "Failed to create roadmap session." },
+          { status: 500 }
+        );
+      }
 
       const rows = roadmap.map((s, i) => ({
         step: s.step,
@@ -114,16 +121,30 @@ export async function POST(req: Request) {
         // Backward-compatible fallback for schemas that don't yet store roadmap metadata.
         if (insertError) {
           const baseRows = rows.map(({ estimated_minutes, prerequisites, ...rest }) => rest);
-          await supabaseServer.from("roadmap").insert(baseRows);
+          const { error: fallbackError } = await supabaseServer.from("roadmap").insert(baseRows);
+          if (fallbackError) {
+            return NextResponse.json(
+              { roadmap: [], message: fallbackError.message || "Failed to persist roadmap steps." },
+              { status: 500 }
+            );
+          }
         }
+        insertedStepCount += rows.length;
       }
 
       allRoadmaps.push({ subject, roadmap });
     }
 
+    if (insertedStepCount === 0) {
+      return NextResponse.json(
+        { roadmap: [], message: "Roadmap generation returned no steps. Try different topics." },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ roadmap: allRoadmaps[0]?.roadmap ?? [], subjects: subjectList });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ roadmap: [] });
+    return NextResponse.json({ roadmap: [], message: "Failed to generate roadmap." }, { status: 500 });
   }
 }

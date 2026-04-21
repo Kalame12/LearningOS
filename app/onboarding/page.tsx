@@ -117,8 +117,15 @@ export default function Onboarding() {
       });
 
       const data = await res.json();
-      if (!data || !Array.isArray(data.roadmap)) {
-        setError("Failed to generate roadmap. Try again.");
+      if (!res.ok) {
+        setError(data?.message || "Failed to generate roadmap. Try again.");
+        setStep(4);
+        setLoading(false);
+        return;
+      }
+      if (!data || !Array.isArray(data.roadmap) || data.roadmap.length === 0) {
+        setError(data?.message || "Roadmap is empty. Try refining topics and retry.");
+        setStep(4);
         setLoading(false);
         return;
       }

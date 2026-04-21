@@ -78,21 +78,29 @@ ${isStruggling ? `⚠ Student scored ${Math.round(recentAccuracy! * 100)}% on re
 
 Your output MUST be a single valid JSON object (no markdown fences, no comments):
 {
-  "markdownLesson": "Full lesson in markdown with headers, bold key terms, and code blocks where relevant",
-  "summary": "1-2 sentence TL;DR the student can say out loud",
+  "markdownLesson": "Full lesson in markdown with deep coverage across the whole topic. Use multiple ## and ### sections. Include conceptual foundation, internal mechanics, workflow/algorithm, edge cases, common mistakes, best practices, and practical application.",
+  "summary": "2-4 sentence TL;DR the student can say out loud",
   "cues": [
     "Precise question a student should answer after reading (not yes/no)",
     "Second cue question",
-    "Third cue question"
+    "Third cue question",
+    "Additional deeper cue question",
+    "Another synthesis/application cue question"
   ],
-  "mainNotes": "Detailed explanation in markdown — use ## headers, bullet points, inline code. 200-300 words. Explain the WHY not just the WHAT.",
+  "mainNotes": "Extensive explanation in markdown using multiple ## and ### headings, bullet points, and inline code where needed. 900-1500 words. Cover all major subtopics, not a brief overview. Explain WHY + HOW + WHEN + trade-offs.",
   "examples": [
     "Concrete code snippet or worked example 1 (as a string, use \\n for newlines)",
-    "Concrete code snippet or worked example 2"
+    "Concrete code snippet or worked example 2",
+    "Concrete code snippet or worked example 3",
+    "Concrete code snippet or worked example 4"
   ],
   "keyTerms": [
     {"term": "exact technical term", "definition": "one-sentence plain-English definition"},
-    {"term": "second term", "definition": "definition"}
+    {"term": "second term", "definition": "definition"},
+    {"term": "third term", "definition": "definition"},
+    {"term": "fourth term", "definition": "definition"},
+    {"term": "fifth term", "definition": "definition"},
+    {"term": "sixth term", "definition": "definition"}
   ],
   "quiz": [
     {"question": "Specific question testing understanding (not memorisation)", "options": ["Option A", "Option B", "Option C", "Option D"], "answerIndex": 0},
@@ -103,9 +111,11 @@ Your output MUST be a single valid JSON object (no markdown fences, no comments)
 
 Quality rules:
 - mainNotes: explain intuitively — use analogies, real-world context
+- mainNotes must be long-form and comprehensive, not short bullet-only notes
+- cover all major subtopics of "${task.topic}" from foundational to advanced practical usage
 - examples: prefer runnable code snippets or step-by-step worked examples
 - quiz: test actual understanding, not trivia — make wrong options plausible
-- keyTerms: 2-4 terms maximum, only the truly essential vocabulary
+- keyTerms: include 6-12 essential terms for complete coverage
 - cues: frame as "How does X work?", "When would you use Y over Z?" style questions`;
 
     let markdownLesson = `## ${task.topic}\n\nThis lesson introduces the key idea in a practical way and prepares you for short retrieval practice.`;
@@ -136,7 +146,7 @@ Quality rules:
         if (parsed?.summary) summary = parsed.summary;
         if (parsed?.quiz && Array.isArray(parsed.quiz)) quiz = parsed.quiz.slice(0, 3);
         cornell = {
-          cues: Array.isArray(parsed.cues) ? parsed.cues.slice(0, 3) : cornell.cues,
+          cues: Array.isArray(parsed.cues) ? parsed.cues : cornell.cues,
           mainNotes: parsed.mainNotes || parsed.markdownLesson || cornell.mainNotes,
           examples: Array.isArray(parsed.examples) ? parsed.examples : [],
           keyTerms: Array.isArray(parsed.keyTerms) ? parsed.keyTerms : [],

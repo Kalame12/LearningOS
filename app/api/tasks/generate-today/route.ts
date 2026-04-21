@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { calculatePriority } from "@/lib/tier1";
 import { getAuthenticatedUserId } from "@/lib/auth-user";
+import { aggregateState, buildNextDayPlan } from "@/lib/brain";
 
 type RoadmapStep = {
   id: string;
@@ -79,10 +79,6 @@ export async function POST(req: Request) {
       .select("topic,mastery_score,next_review_date")
       .eq("user_id", userId);
 
-    const masteryMap = new Map(
-      (masteryRows || []).map((row) => [String(row.topic).toLowerCase(), row])
-    );
-
     const yesterdayStart = new Date();
     yesterdayStart.setDate(yesterdayStart.getDate() - 1);
     yesterdayStart.setHours(0, 0, 0, 0);
@@ -102,104 +98,24 @@ export async function POST(req: Request) {
       .select("id,topic,estimated_minutes")
       .in("id", yesterdayTaskIds.length > 0 ? yesterdayTaskIds : [""]);
 
-    const yesterdayTaskMap = new Map((yesterdayTasks || []).map((t) => [t.id, t]));
-    const yesterdayPerformanceByTopic = new Map<string, number>();
-    for (const attempt of yesterdayAttempts || []) {
-      const task = yesterdayTaskMap.get(attempt.task_id);
-      if (!task?.topic) continue;
-      const topicKey = String(task.topic).toLowerCase();
-      const total = Number(attempt.total_count || 0);
-      const accuracy = total > 0 ? Number(attempt.correct_count || 0) / total : 0;
-      const hintsPenalty = Math.min(0.2, Number(attempt.hints_used || 0) * 0.04);
-      const skipPenalty = Math.min(0.25, Number(attempt.skipped_count || 0) * 0.08);
-      const overtime =
-        Number(task.estimated_minutes || 30) > 0 &&
-        Number(attempt.time_spent_minutes || 0) > Number(task.estimated_minutes || 30) * 1.3
-          ? 0.05
-          : 0;
-      const performance = Math.max(0, Math.min(1, accuracy - hintsPenalty - skipPenalty - overtime));
-      const prev = yesterdayPerformanceByTopic.get(topicKey);
-      yesterdayPerformanceByTopic.set(topicKey, prev === undefined ? performance : (prev + performance) / 2);
-    }
-
-    const firstPendingIndex = steps.findIndex((step) => step.status === "not_started");
-    const nextSteps = steps.slice(Math.max(0, firstPendingIndex), Math.max(0, firstPendingIndex) + 4);
-    const candidates = nextSteps.length > 0 ? nextSteps : steps.slice(0, 4);
-
-    const taskRows: TaskInsertRow[] = candidates.map((step, idx) => {
-      const mastery = masteryMap.get(step.step.toLowerCase());
-      const reviewDue = mastery?.next_review_date
-        ? mastery.next_review_date <= today
-        : false;
-      const weakness = mastery ? 1 - Number(mastery.mastery_score || 0) : 0.5;
-      const score = calculatePriority({
-        isRoadmapNext: idx < 2,
-        reviewDue,
-        weaknessScore: weakness,
-      });
-      const yesterdayPerformance = yesterdayPerformanceByTopic.get(step.step.toLowerCase());
-      const yesterdayWeakness =
-        yesterdayPerformance === undefined ? 0 : Number((1 - yesterdayPerformance).toFixed(3));
-      const adjustedScore = Number(
-        Math.min(1, score + yesterdayWeakness * 0.2 + (reviewDue ? 0.05 : 0)).toFixed(3)
-      );
-      const inferredType = reviewDue ? "revise" : step.type || "learn";
-
-      return {
-        user_id: userId,
-        roadmap_step_id: step.id,
-        topic: step.step,
-        task_type: inferredType as "learn" | "practice" | "revise",
-        status: "pending",
-        priority_score: adjustedScore,
-        estimated_minutes: inferredType === "learn" ? 40 : 25,
-        due_date: today,
-      };
+    const state = aggregateState({
+      steps,
+      masteryRows: masteryRows || [],
+      yesterdayAttempts: yesterdayAttempts || [],
+      yesterdayTasks: yesterdayTasks || [],
+      today,
     });
-
-    // If mastery is weak, inject prerequisite review task from previous roadmap step.
-    const prerequisiteRows: TaskInsertRow[] = [];
-    for (const step of candidates) {
-      const mastery = masteryMap.get(step.step.toLowerCase());
-      if (!mastery || Number(mastery.mastery_score ?? 1) >= 0.5) continue;
-      const previous = steps.find((s) => s.order_index === step.order_index - 1);
-      if (!previous) continue;
-      prerequisiteRows.push({
-        user_id: userId,
-        roadmap_step_id: previous.id,
-        topic: `${previous.step} (Prerequisite Review)`,
-        task_type: "revise",
-        status: "pending",
-        priority_score: 0.98,
-        estimated_minutes: 20,
-        due_date: today,
-      });
-    }
-
-    const uniqueRows = [...prerequisiteRows, ...taskRows]
-      .filter((row, index, arr) => arr.findIndex((x) => x.topic === row.topic) === index)
-      .sort((a, b) => b.priority_score - a.priority_score);
-
-    // Guarantee a practical daily plan of at least 3 tasks when roadmap has capacity.
-    if (uniqueRows.length < 3) {
-      const existingStepIds = new Set(uniqueRows.map((row) => row.roadmap_step_id));
-      const fallbackRows = steps
-        .filter((step) => !existingStepIds.has(step.id))
-        .slice(0, 3 - uniqueRows.length)
-        .map((step, idx) => ({
-          user_id: userId,
-          roadmap_step_id: step.id,
-          topic: step.step,
-          task_type: (step.type || "learn") as "learn" | "practice" | "revise",
-          status: "pending" as const,
-          priority_score: Number((0.55 - idx * 0.02).toFixed(3)),
-          estimated_minutes: step.type === "learn" ? 40 : 25,
-          due_date: today,
-        }));
-      uniqueRows.push(...fallbackRows);
-    }
-
-    const finalRows = uniqueRows.slice(0, 5);
+    const planned = buildNextDayPlan({ userId, steps, state, today });
+    const finalRows: TaskInsertRow[] = planned.map((task) => ({
+      user_id: userId,
+      roadmap_step_id: task.roadmap_step_id,
+      topic: task.topic,
+      task_type: task.task_type,
+      status: "pending",
+      priority_score: task.priority_score,
+      estimated_minutes: task.estimated_minutes,
+      due_date: today,
+    }));
 
     const { data: inserted, error: insertError } = await supabaseServer
       .from("learning_tasks")
@@ -213,7 +129,17 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ tasks: inserted || [] });
+    const explanationMap = new Map(planned.map((item) => [item.topic, item]));
+    const decorated = (inserted || []).map((task) => {
+      const explanation = explanationMap.get(task.topic);
+      return {
+        ...task,
+        intervention: explanation?.intervention,
+        whyNow: explanation?.whyNow || "Selected to keep balanced momentum for today.",
+      };
+    });
+
+    return NextResponse.json({ tasks: decorated });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ tasks: [], message: "Could not generate tasks." }, { status: 500 });

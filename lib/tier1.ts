@@ -6,6 +6,8 @@ export type DailyTaskRow = {
   estimated_minutes: number;
   priority_score: number;
   due_date: string;
+  intervention?: "accelerate" | "reinforce" | "revise" | "stabilize";
+  whyNow?: string;
 };
 
 type MasteryRow = {

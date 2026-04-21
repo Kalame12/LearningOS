@@ -14,11 +14,11 @@ Topic: "${topic}"
 
 Return ONLY a valid JSON object (no markdown fences):
 {
-  "summary": "1-2 sentence TL;DR",
-  "cues": ["How does X work?", "When would you use this?", "What is the key tradeoff?"],
-  "mainNotes": "200-250 word explanation in markdown — use ## headers, bold key terms, inline code snippets where relevant. Explain the WHY, use analogies.",
-  "examples": ["Concrete code or worked example (use \\n for line breaks)", "Second example if applicable"],
-  "keyTerms": [{"term": "technical term", "definition": "plain-English one-sentence definition"}],
+  "summary": "2-4 sentence TL;DR",
+  "cues": ["How does X work?", "When would you use this?", "What is the key tradeoff?", "How does this compare to alternatives?", "What mistakes should be avoided?"],
+  "mainNotes": "Comprehensive 700-1200 word explanation in markdown — use multiple ## and ### headers, bold key terms, inline code snippets where relevant. Cover complete topic scope, not a brief summary.",
+  "examples": ["Concrete code or worked example (use \\n for line breaks)", "Second example", "Third example", "Fourth example if useful"],
+  "keyTerms": [{"term": "technical term", "definition": "plain-English one-sentence definition"}, {"term": "second term", "definition": "definition"}, {"term": "third term", "definition": "definition"}],
   "quiz": [
     {"question": "Specific question testing understanding", "options": ["Plausible A", "Plausible B", "Plausible C", "Plausible D"], "answerIndex": 0},
     {"question": "Scenario-based question", "options": ["A", "B", "C", "D"], "answerIndex": 2},
@@ -28,9 +28,10 @@ Return ONLY a valid JSON object (no markdown fences):
 
 Quality requirements:
 - mainNotes: intuitive explanation with real-world context, not a textbook definition
+- mainNotes must be comprehensive and detailed, covering all major subtopics of "${topic}"
 - examples: prefer short runnable code snippets or step-by-step worked problems
 - quiz: wrong answers must be plausible — test understanding, not memorisation
-- keyTerms: 2-3 max, only the truly essential vocabulary for this topic`;
+- keyTerms: include 6-12 important terms for full topic coverage`;
 
     const fallback = {
       summary: `Overview of ${topic}`,
@@ -57,7 +58,7 @@ Quality requirements:
         return NextResponse.json({
           summary: parsed.summary || fallback.summary,
           cornell: {
-            cues: Array.isArray(parsed.cues) ? parsed.cues.slice(0, 3) : fallback.cues,
+            cues: Array.isArray(parsed.cues) ? parsed.cues : fallback.cues,
             mainNotes: parsed.mainNotes || fallback.mainNotes,
             examples: Array.isArray(parsed.examples) ? parsed.examples : [],
             keyTerms: Array.isArray(parsed.keyTerms) ? parsed.keyTerms : [],

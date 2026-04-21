@@ -89,6 +89,12 @@ export default function TodayPage() {
                   <p className="text-sm text-zinc-400">
                     {task.task_type.toUpperCase()} • {task.estimated_minutes} mins • priority {task.priority_score}
                   </p>
+                  {task.intervention && (
+                    <p className="text-xs text-indigo-300 mt-1 uppercase tracking-wide">
+                      Strategy: {task.intervention}
+                    </p>
+                  )}
+                  {task.whyNow && <p className="text-xs text-zinc-500 mt-1">{task.whyNow}</p>}
                   <div className="progress-bar-track mt-2">
                     <div className="progress-bar-fill" style={{ width: `${Math.min(100, task.priority_score * 100)}%` }} />
                   </div>

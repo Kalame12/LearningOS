@@ -23,11 +23,20 @@ export async function POST(req: Request) {
 
     const { data: stepRow } = await supabaseServer
       .from("roadmap")
-      .select("step, type")
+      .select("step, type, session_id")
       .eq("id", stepId)
       .single();
 
     if (!stepRow) return NextResponse.json({ error: "Step not found" }, { status: 404 });
+
+    const { data: session } = await supabaseServer
+      .from("roadmap_sessions")
+      .select("id,user_id")
+      .eq("id", stepRow.session_id)
+      .single();
+    if (!session || session.user_id !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { data: task } = await supabaseServer
       .from("learning_tasks")

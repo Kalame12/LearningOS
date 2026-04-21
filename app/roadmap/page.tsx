@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
 import RoadmapGraph from "@/components/RoadmapGraph";
 import StepDetailPanel from "@/components/StepDetailPanel";
 import PageLoader from "@/components/PageLoader";
@@ -28,13 +27,9 @@ export default function RoadmapPage() {
     const fetchSessions = async () => {
       setLoading(true);
       try {
-        const { data } = await supabase
-          .from("roadmap_sessions")
-          .select("id, subject, level, created_at")
-          .neq("subject", "General")
-          .order("created_at", { ascending: false }); // newest first
-
-        const all = (data || []) as Session[];
+        const res = await fetch("/api/roadmap/sessions", { cache: "no-store" });
+        const payload = await res.json();
+        const all = (payload.sessions || []) as Session[];
 
         // Deduplicate: keep only the latest session per subject
         const seen = new Map<string, Session>();
@@ -58,12 +53,15 @@ export default function RoadmapPage() {
     if (!activeSessionId) return;
     const fetchSteps = async () => {
       setStepsLoading(true);
-      const { data } = await supabase
-        .from("roadmap")
-        .select("*")
-        .eq("session_id", activeSessionId)
-        .order("order_index");
-      setSteps(data || []);
+      try {
+        const res = await fetch(`/api/roadmap/sessions?sessionId=${encodeURIComponent(activeSessionId)}`, {
+          cache: "no-store",
+        });
+        const payload = await res.json();
+        setSteps(payload.steps || []);
+      } catch {
+        setSteps([]);
+      }
       setStepsLoading(false);
     };
     fetchSteps();
