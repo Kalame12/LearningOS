@@ -1,26 +1,45 @@
 import { NextResponse } from "next/server";
 
+type YouTubeSearchItem = {
+  id?: { videoId?: string };
+  snippet?: {
+    title?: string;
+    channelTitle?: string;
+    thumbnails?: { medium?: { url?: string } };
+  };
+};
+
+type YouTubeStatsItem = {
+  id?: string;
+  statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
+};
+
+function toNumber(value: string | undefined): number {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const topic = searchParams.get("topic") || "";
+  const topic = (searchParams.get("topic") || "").trim();
+  const encoded = encodeURIComponent(`${topic} tutorial`);
+  const fallbackVideos = [
+    {
+      title: `Search YouTube: ${topic} tutorial`,
+      thumbnail: null,
+      videoId: null,
+      url: `https://www.youtube.com/results?search_query=${encoded}`,
+      views: null,
+      channel: "YouTube Search",
+    },
+  ];
 
   if (!topic) return NextResponse.json({ videos: [] });
 
   const apiKey = process.env.YOUTUBE_API_KEY;
 
   if (!apiKey) {
-    const encoded = encodeURIComponent(`${topic} tutorial`);
-    return NextResponse.json({
-      videos: [
-        {
-          title: `Search YouTube: ${topic} tutorial`,
-          thumbnail: null,
-          videoId: null,
-          url: `https://www.youtube.com/results?search_query=${encoded}`,
-          views: null,
-        },
-      ],
-    });
+    return NextResponse.json({ videos: fallbackVideos });
   }
 
   try {
@@ -29,36 +48,65 @@ export async function GET(req: Request) {
         topic + " tutorial"
       )}&type=video&maxResults=5&order=viewCount&relevanceLanguage=en&key=${apiKey}`
     );
+    if (!searchRes.ok) {
+      return NextResponse.json({ videos: fallbackVideos });
+    }
     const searchData = await searchRes.json();
-    const items = searchData.items || [];
-    const videoIds = items.map((i: any) => i.id.videoId).join(",");
+    const items = (searchData.items || []) as YouTubeSearchItem[];
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ videos: fallbackVideos });
+    }
+    const videoIds = items.map((i) => i.id?.videoId).filter(Boolean).join(",");
+    if (!videoIds) {
+      return NextResponse.json({ videos: fallbackVideos });
+    }
 
     const statsRes = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=statistics,contentDetails&id=${videoIds}&key=${apiKey}`
     );
-    const statsData = await statsRes.json();
-    const statsMap = new Map(
-      (statsData.items || []).map((v: any) => [v.id, v])
+    const statsData = statsRes.ok ? await statsRes.json() : { items: [] };
+    const statsMap = new Map<string, YouTubeStatsItem>(
+      ((statsData.items || []) as YouTubeStatsItem[]).map((v) => [String(v.id || ""), v])
     );
 
-    const videos = items.slice(0, 3).map((item: any) => {
-      const stat = statsMap.get(item.id.videoId) as any;
-      const views = stat?.statistics?.viewCount
-        ? Number(stat.statistics.viewCount).toLocaleString()
-        : null;
-      return {
-        title: item.snippet.title,
-        thumbnail: item.snippet.thumbnails.medium.url,
-        videoId: item.id.videoId,
-        url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-        views,
-        channel: item.snippet.channelTitle,
-      };
-    });
+    const ranked = items
+      .map((item) => {
+        const videoId = item.id?.videoId || "";
+        const stat = statsMap.get(videoId);
+        const viewCount = toNumber(stat?.statistics?.viewCount);
+        const likeCount = toNumber(stat?.statistics?.likeCount);
+        const commentCount = toNumber(stat?.statistics?.commentCount);
+        // Weighted quality score: views + engagement ratio proxy.
+        const engagement = (likeCount + commentCount * 2) / Math.max(1, viewCount);
+        const score = viewCount * (1 + engagement * 10);
+        return {
+          title: item.snippet?.title || "YouTube Video",
+          thumbnail: item.snippet?.thumbnails?.medium?.url || null,
+          videoId: videoId || null,
+          url: videoId
+            ? `https://www.youtube.com/watch?v=${videoId}`
+            : `https://www.youtube.com/results?search_query=${encoded}`,
+          views: viewCount > 0 ? viewCount.toLocaleString() : null,
+          channel: item.snippet?.channelTitle || null,
+          qualityScore: Number(score.toFixed(2)),
+        };
+      })
+      .filter((video) => Boolean(video.videoId))
+      .sort((a, b) => b.qualityScore - a.qualityScore);
 
-    return NextResponse.json({ videos });
+    const videos = ranked.slice(0, 3).map((video) => ({
+      title: video.title,
+      thumbnail: video.thumbnail,
+      videoId: video.videoId,
+      url: video.url,
+      views: video.views,
+      channel: video.channel,
+      qualityScore: video.qualityScore,
+    }));
+
+    return NextResponse.json({ videos: videos.length > 0 ? videos : fallbackVideos });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ videos: [] });
+    return NextResponse.json({ videos: fallbackVideos });
   }
 }

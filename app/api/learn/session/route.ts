@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { AIProvider, generateAIText } from "@/lib/ai-provider";
 import { getAuthenticatedUserId } from "@/lib/auth-user";
+import { resolveAI } from "@/lib/ai-config";
 
 type QuizItem = {
   question: string;
@@ -19,7 +20,8 @@ type CornellNote = {
 
 export async function POST(req: Request) {
   try {
-    const { taskId, provider = "openai", model } = await req.json();
+    const { taskId, provider, model } = await req.json();
+    const ai = resolveAI(provider, model);
     const userId = await getAuthenticatedUserId();
     if (!userId) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -122,7 +124,12 @@ Quality rules:
     ];
 
     try {
-      const text = await generateAIText({ provider: provider as AIProvider, prompt, openAIModel: model, geminiModel: model });
+      const text = await generateAIText({
+        provider: ai.provider as AIProvider,
+        prompt,
+        openAIModel: ai.provider === "openai" ? ai.model : undefined,
+        geminiModel: ai.provider === "gemini" ? ai.model : undefined,
+      });
       if (text) {
         const parsed = JSON.parse(text);
         if (parsed?.markdownLesson) markdownLesson = parsed.markdownLesson;
@@ -144,7 +151,7 @@ Quality rules:
       task,
       lesson: { markdownLesson, summary, quiz, cornell },
       thoughts,
-      provider,
+      provider: ai.provider,
     });
   } catch (error) {
     console.error(error);

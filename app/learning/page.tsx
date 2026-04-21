@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import Visualizer from "@/components/Visualizer";
 import Link from "next/link";
+import { DEFAULT_CLIENT_MODEL_BY_PROVIDER, DEFAULT_CLIENT_PROVIDER } from "@/lib/ai-client-defaults";
 
 export default function LearningPage() {
   const [input, setInput] = useState("");
@@ -115,8 +116,10 @@ export default function LearningPage() {
         },
         body: JSON.stringify({
           input,
-          provider: localStorage.getItem("ai_provider") || "openai",
-          model: localStorage.getItem("ai_model") || "gpt-4o-mini",
+          provider: localStorage.getItem("ai_provider") || DEFAULT_CLIENT_PROVIDER,
+          model:
+            localStorage.getItem("ai_model") ||
+            DEFAULT_CLIENT_MODEL_BY_PROVIDER[localStorage.getItem("ai_provider") || DEFAULT_CLIENT_PROVIDER],
         }),
       });
 

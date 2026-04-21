@@ -19,6 +19,7 @@ export default function RoadmapPage() {
   const [editMode, setEditMode] = useState(false);
   const [editedTitles, setEditedTitles] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
   const [panelStep, setPanelStep] = useState<any | null>(null);
 
@@ -29,6 +30,7 @@ export default function RoadmapPage() {
         const { data } = await supabase
           .from("roadmap_sessions")
           .select("id, subject, level, created_at")
+          .neq("subject", "General")
           .order("created_at", { ascending: false }); // newest first
 
         const all = (data || []) as Session[];
@@ -90,7 +92,7 @@ export default function RoadmapPage() {
       const res = await fetch("/api/roadmap/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stepId: step.id, userId: "user-1" }),
+        body: JSON.stringify({ stepId: step.id }),
       });
       const data = await res.json();
       if (data.taskId) router.push(`/learn/${data.taskId}`);
@@ -98,6 +100,20 @@ export default function RoadmapPage() {
       console.error(err);
     }
     setStartingId(null);
+  };
+
+  const handleResetRoadmap = async () => {
+    if (!confirm("This will delete your existing roadmap sessions and today's generated tasks. Continue?")) return;
+    setResetting(true);
+    try {
+      await fetch("/api/roadmap/reset", { method: "POST" });
+      setSessions([]);
+      setSteps([]);
+      setActiveSessionId(null);
+    } catch (err) {
+      console.error(err);
+    }
+    setResetting(false);
   };
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -123,16 +139,21 @@ export default function RoadmapPage() {
                 </button>
               </>
             ) : (
-              <button onClick={() => setEditMode(true)} className="btn-ghost text-sm flex items-center gap-1.5">
-                <Pencil size={14} /> Edit Steps
-              </button>
+              <>
+                <button onClick={() => setEditMode(true)} className="btn-ghost text-sm flex items-center gap-1.5">
+                  <Pencil size={14} /> Edit Steps
+                </button>
+                <button onClick={handleResetRoadmap} disabled={resetting} className="btn-ghost text-sm">
+                  {resetting ? "Resetting..." : "Reset Roadmap"}
+                </button>
+              </>
             )}
           </div>
         </div>
 
         {loading && <p className="text-zinc-400">Loading roadmaps...</p>}
         {!loading && sessions.length === 0 && (
-          <p className="text-zinc-500">No roadmap found. Complete onboarding first.</p>
+        <p className="text-zinc-500">No roadmap found. Complete onboarding to generate one.</p>
         )}
 
         {!loading && sessions.length > 0 && (

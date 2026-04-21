@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import ThinkingPanel from "@/components/ThinkingPanel";
+import { DEFAULT_CLIENT_MODEL_BY_PROVIDER, DEFAULT_CLIENT_PROVIDER } from "@/lib/ai-client-defaults";
 
 type QuizItem = { question: string; options: string[]; answerIndex: number };
 type CornellNote = {
@@ -33,8 +34,8 @@ export default function LearnTaskPage() {
   const [confidence, setConfidence] = useState(3);
   const [error, setError] = useState("");
   const [sessionStart] = useState<number>(Date.now());
-  const [provider, setProvider] = useState("openai");
-  const [model, setModel] = useState("gpt-4o-mini");
+  const [provider, setProvider] = useState(DEFAULT_CLIENT_PROVIDER);
+  const [model, setModel] = useState(DEFAULT_CLIENT_MODEL_BY_PROVIDER[DEFAULT_CLIENT_PROVIDER]);
   const [canExplain, setCanExplain] = useState(false);
   const [blocker, setBlocker] = useState("");
 
@@ -43,6 +44,10 @@ export default function LearnTaskPage() {
     const savedModel = localStorage.getItem("ai_model");
     if (savedProvider) setProvider(savedProvider);
     if (savedModel) setModel(savedModel);
+    if (!savedProvider && !savedModel) {
+      setProvider(DEFAULT_CLIENT_PROVIDER);
+      setModel(DEFAULT_CLIENT_MODEL_BY_PROVIDER[DEFAULT_CLIENT_PROVIDER]);
+    }
   }, []);
 
   useEffect(() => {
@@ -111,28 +116,9 @@ export default function LearnTaskPage() {
         <h1 className="page-header">{topic}</h1>
         <p className="page-subheader mb-6">Read, answer the quiz, and complete the task to update mastery.</p>
 
-        <div className="flex flex-wrap gap-3 mb-6">
-          <select
-            value={provider}
-            onChange={(e) => {
-              setProvider(e.target.value);
-              const m = e.target.value === "gemini" ? "gemini-1.5-flash" : "gpt-4o-mini";
-              setModel(m);
-              localStorage.setItem("ai_provider", e.target.value);
-              localStorage.setItem("ai_model", m);
-            }}
-            className="field-input max-w-[160px]"
-          >
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Gemini</option>
-          </select>
-          <input
-            value={model}
-            onChange={(e) => { setModel(e.target.value); localStorage.setItem("ai_model", e.target.value); }}
-            className="field-input max-w-[200px]"
-            placeholder="Model"
-          />
-        </div>
+        <p className="text-xs text-zinc-500 mb-6">
+          Using AI settings from onboarding: {provider} / {model}
+        </p>
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* LEFT: lesson + quiz */}

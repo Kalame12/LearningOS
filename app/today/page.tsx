@@ -23,22 +23,12 @@ export default function TodayPage() {
     const res = await fetch("/api/tasks/generate-today", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ force: true }),
     });
     const data = await res.json();
     setTasks(data.tasks || []);
     setMessage(data.message || "");
     setLoading(false);
-  };
-
-  const seedDemoData = async () => {
-    setLoading(true);
-    const res = await fetch("/api/demo/seed", {
-      method: "POST",
-    });
-    const data = await res.json();
-    setMessage(data.message || "Demo data loaded.");
-    await refreshTasks();
   };
 
   useEffect(() => {
@@ -75,11 +65,8 @@ export default function TodayPage() {
 
         <div className="flex flex-wrap gap-3 mb-6">
           <button onClick={generateTasks} className="btn-primary">
-          Generate Today&apos;s Tasks
+          Generate Today&apos;s Plan
         </button>
-          <button onClick={seedDemoData} className="bg-violet-600 text-white px-4 py-2 rounded hover:bg-violet-700">
-            Seed Demo Data
-          </button>
           <button onClick={refreshTasks} className="btn-ghost">
           Refresh
         </button>

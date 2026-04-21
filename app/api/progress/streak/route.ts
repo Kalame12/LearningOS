@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getAuthenticatedUserId } from "@/lib/auth-user";
 
 type DayData = {
   date: string;
@@ -10,8 +11,11 @@ type DayData = {
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId") || "user-1";
+    new URL(req.url);
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ currentStreak: 0, longestStreak: 0, days: [], message: "Unauthorized" }, { status: 401 });
+    }
 
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 89);

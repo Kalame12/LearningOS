@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { generateAIText } from "@/lib/ai-provider";
+import { DEFAULT_AI_PROVIDER, DEFAULT_GEMINI_MODEL, DEFAULT_OPENAI_MODEL, resolveAI } from "@/lib/ai-config";
 
 type Message = { role: "user" | "assistant"; content: string };
-type Context = { page?: string; userId?: string };
+type Context = { page?: string; userId?: string; provider?: string; model?: string };
 
 export async function POST(req: Request) {
   try {
@@ -29,23 +31,19 @@ export async function POST(req: Request) {
 Current page: ${page || "unknown"}
 Keep responses concise and actionable (2-3 sentences max unless explaining a concept).
 If asked to add a topic to the roadmap, confirm you will do it.`;
-
-        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "openai/gpt-4o-mini",
-            messages: [
-              { role: "system", content: systemPrompt },
-              ...messages.slice(-6),
-            ],
-          }),
+        const ai = resolveAI(context?.provider || DEFAULT_AI_PROVIDER, context?.model);
+        const joinedMessages = messages
+          .slice(-6)
+          .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+          .join("\n");
+        const prompt = `${systemPrompt}\n\nConversation:\n${joinedMessages}\n\nASSISTANT:`;
+        const text = await generateAIText({
+          provider: ai.provider,
+          prompt,
+          openAIModel: ai.provider === "openai" ? ai.model || DEFAULT_OPENAI_MODEL : DEFAULT_OPENAI_MODEL,
+          geminiModel: ai.provider === "gemini" ? ai.model || DEFAULT_GEMINI_MODEL : DEFAULT_GEMINI_MODEL,
         });
-        const data = await res.json();
-        reply = data.choices?.[0]?.message?.content || "I'm here to help with your studies!";
+        reply = text || "I'm here to help with your studies!";
       } catch {
         reply = "I'm here to help! What are you studying?";
       }

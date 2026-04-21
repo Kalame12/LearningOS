@@ -34,7 +34,11 @@ export default function FloatingChatbot() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [...messages, userMsg],
-          context: { page: pathname, userId: "user-1" },
+          context: {
+            page: pathname,
+            provider: typeof window !== "undefined" ? localStorage.getItem("ai_provider") || undefined : undefined,
+            model: typeof window !== "undefined" ? localStorage.getItem("ai_model") || undefined : undefined,
+          },
         }),
       });
       const data = await res.json();

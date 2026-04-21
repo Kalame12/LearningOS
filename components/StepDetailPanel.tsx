@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import { X, Play, ExternalLink, BookOpen, PlayCircle, HelpCircle, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
-type Video = { title: string; thumbnail: string | null; url: string; views: string | null; channel?: string };
+type Video = {
+  title: string;
+  thumbnail: string | null;
+  url: string;
+  views: string | null;
+  channel?: string | null;
+  videoId?: string | null;
+  qualityScore?: number;
+};
 type QuizItem = { question: string; options: string[]; answerIndex: number };
 type CornellNote = { cues: string[]; mainNotes: string; examples: string[]; keyTerms: { term: string; definition: string }[]; summary: string };
 
@@ -27,6 +35,8 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
   const [quizLoading, setQuizLoading] = useState(false);
   const [answers, setAnswers] = useState<number[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);
+  const [trackingVideoId, setTrackingVideoId] = useState<string | null>(null);
 
   // Load notes on open
   useEffect(() => {
@@ -67,7 +77,54 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
     load();
   }, [tab, step.step, videos.length]);
 
+  useEffect(() => {
+    if (tab !== "videos" || videos.length === 0) return;
+    const ids = videos
+      .map((video) => video.videoId || "")
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) return;
+
+    const loadProgress = async () => {
+      try {
+        const res = await fetch(
+          `/api/resources/progress?topic=${encodeURIComponent(step.step)}&videoIds=${encodeURIComponent(ids.join(","))}`
+        );
+        const data = await res.json();
+        setWatchedVideoIds(Array.isArray(data.watchedVideoIds) ? data.watchedVideoIds : []);
+      } catch {
+        setWatchedVideoIds([]);
+      }
+    };
+    loadProgress();
+  }, [tab, videos, step.step]);
+
+  const toggleWatched = async (videoId: string, watched: boolean) => {
+    setTrackingVideoId(videoId);
+    try {
+      await fetch("/api/resources/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: step.step,
+          videoId,
+          watched,
+        }),
+      });
+      setWatchedVideoIds((prev) =>
+        watched ? Array.from(new Set([...prev, videoId])) : prev.filter((id) => id !== videoId)
+      );
+    } finally {
+      setTrackingVideoId(null);
+    }
+  };
+
   const correctCount = submitted ? quiz.reduce((acc, q, i) => (answers[i] === q.answerIndex ? acc + 1 : acc), 0) : 0;
+  const allCurrentVideosWatched =
+    videos.length > 0 &&
+    videos
+      .map((video) => video.videoId || "")
+      .filter((id): id is string => Boolean(id))
+      .every((id) => watchedVideoIds.includes(id));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
@@ -189,9 +246,15 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
               {!videosLoading && videos.length === 0 && <p className="text-zinc-500 text-sm">No videos found.</p>}
               {!videosLoading && videos.length > 0 && (
                 <div className="space-y-3">
+                  <div className={`text-xs px-3 py-2 rounded border ${allCurrentVideosWatched ? "bg-emerald-950/40 border-emerald-700 text-emerald-300" : "bg-zinc-900 border-zinc-700 text-zinc-400"}`}>
+                    {allCurrentVideosWatched
+                      ? "All recommended videos marked as watched."
+                      : `${watchedVideoIds.length}/${videos.filter((v) => Boolean(v.videoId)).length} videos marked as watched.`}
+                  </div>
                   {videos.map((v, i) => (
-                    <a key={i} href={v.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition group">
+                    <div key={i} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+                      <a href={v.url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-3 hover:bg-zinc-800 rounded-lg transition group">
                       {v.thumbnail ? (
                         <div className="relative shrink-0 w-24 h-16 rounded overflow-hidden">
                           <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
@@ -209,10 +272,25 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
                         <div className="flex items-center gap-2 mt-1">
                           {v.channel && <p className="text-xs text-zinc-500 truncate">{v.channel}</p>}
                           {v.views && <p className="text-xs text-zinc-600 shrink-0">{v.views} views</p>}
+                          {typeof v.qualityScore === "number" && (
+                            <p className="text-xs text-zinc-600 shrink-0">score {v.qualityScore}</p>
+                          )}
                         </div>
                       </div>
                       <ExternalLink size={14} className="text-zinc-600 group-hover:text-zinc-400 transition shrink-0" />
-                    </a>
+                      </a>
+                      {v.videoId && (
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            onClick={() => toggleWatched(v.videoId as string, !watchedVideoIds.includes(v.videoId as string))}
+                            disabled={trackingVideoId === v.videoId}
+                            className="text-xs px-2 py-1 rounded border border-zinc-700 text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+                          >
+                            {watchedVideoIds.includes(v.videoId) ? "Mark as not watched" : "Mark as watched"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}

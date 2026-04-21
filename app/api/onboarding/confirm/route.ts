@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { generateAIText } from "@/lib/ai-provider";
+import { resolveAI } from "@/lib/ai-config";
 
 export async function POST(req: Request) {
   try {
-    const { subjects } = await req.json();
+    const { subjects, provider, model } = await req.json();
     if (!Array.isArray(subjects) || subjects.length === 0) {
       return NextResponse.json({ confirmed: [], suggested: [], message: "" });
     }
@@ -21,11 +22,14 @@ Return ONLY the JSON object, no markdown fences.`;
     let suggested: string[] = [];
     let message = `I'll build your roadmap around: ${subjects.join(", ")}.`;
 
+    const ai = resolveAI(provider, model);
+
     try {
       const text = await generateAIText({
-        provider: "openai",
+        provider: ai.provider,
         prompt,
-        openAIModel: "gpt-4o-mini",
+        openAIModel: ai.provider === "openai" ? ai.model : undefined,
+        geminiModel: ai.provider === "gemini" ? ai.model : undefined,
       });
       const parsed = JSON.parse(text);
       if (parsed.confirmed) confirmed = parsed.confirmed;

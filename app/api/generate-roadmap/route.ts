@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseServer } from "@/lib/supabaseServer";
 import { buildRoadmapPrompt, parseRoadmap, fallbackRoadmap, StudentProfileInput } from "@/lib/learning-os";
 import { generateAIText } from "@/lib/ai-provider";
+import { getAuthenticatedUserId } from "@/lib/auth-user";
 
 async function generateRoadmapForSubject(
   profile: StudentProfileInput,
@@ -30,7 +31,6 @@ async function generateRoadmapForSubject(
 export async function POST(req: Request) {
   try {
     const {
-      userId,
       level,
       interest,
       goal,
@@ -40,12 +40,16 @@ export async function POST(req: Request) {
       model,
       subjects,
     } = await req.json();
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ roadmap: [], message: "Unauthorized" }, { status: 401 });
+    }
 
     const currentLevel =
       level === "intermediate" || level === "advanced" ? level : "beginner";
 
     const baseProfile: StudentProfileInput = {
-      userId: userId || "user-1",
+      userId,
       goal: goal || interest || "general learning",
       interest: interest || "general",
       currentLevel,
@@ -72,7 +76,7 @@ export async function POST(req: Request) {
 
     for (const subject of subjectList) {
       // Delete old sessions for same subject + user to avoid duplicate tabs
-      const { data: oldSessions } = await supabase
+      const { data: oldSessions } = await supabaseServer
         .from("roadmap_sessions")
         .select("id")
         .eq("user_id", baseProfile.userId)
@@ -80,13 +84,13 @@ export async function POST(req: Request) {
 
       if (oldSessions && oldSessions.length > 0) {
         const oldIds = oldSessions.map((s: any) => s.id);
-        await supabase.from("roadmap").delete().in("session_id", oldIds);
-        await supabase.from("roadmap_sessions").delete().in("id", oldIds);
+        await supabaseServer.from("roadmap").delete().in("session_id", oldIds);
+        await supabaseServer.from("roadmap_sessions").delete().in("id", oldIds);
       }
 
       const roadmap = await generateRoadmapForSubject(baseProfile, subject, provider, model);
 
-      const { data: session } = await supabase
+      const { data: session } = await supabaseServer
         .from("roadmap_sessions")
         .insert([{ user_id: baseProfile.userId, level: currentLevel, subject: subject.trim() }])
         .select()
@@ -103,7 +107,7 @@ export async function POST(req: Request) {
         session_id: session?.id,
       }));
 
-      if (rows.length > 0) await supabase.from("roadmap").insert(rows);
+      if (rows.length > 0) await supabaseServer.from("roadmap").insert(rows);
 
       allRoadmaps.push({ subject, roadmap });
     }

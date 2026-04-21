@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { ArrowRight, X, Plus } from "lucide-react";
+import { DEFAULT_CLIENT_MODEL_BY_PROVIDER, DEFAULT_CLIENT_PROVIDER } from "@/lib/ai-client-defaults";
 
 type Answers = {
   fullName: string;
@@ -30,8 +31,8 @@ export default function Onboarding() {
     subjects: [],
     semesterWeeks: "16",
     dailyMinutes: "90",
-    provider: "openai",
-    model: "gpt-4o-mini",
+    provider: DEFAULT_CLIENT_PROVIDER,
+    model: DEFAULT_CLIENT_MODEL_BY_PROVIDER[DEFAULT_CLIENT_PROVIDER],
   });
 
   const addSubject = () => {
@@ -56,7 +57,11 @@ export default function Onboarding() {
       const res = await fetch("/api/onboarding/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subjects: answers.subjects }),
+        body: JSON.stringify({
+          subjects: answers.subjects,
+          provider: answers.provider,
+          model: answers.model,
+        }),
       });
       const data = await res.json();
       setConfirmed(data.confirmed || answers.subjects);
@@ -85,7 +90,7 @@ export default function Onboarding() {
       if (answers.experience === "advanced") score = 5;
       const level = score >= 5 ? "advanced" : score >= 3 ? "intermediate" : "beginner";
 
-      await supabase.from("profiles").insert([{
+      const profileBase = {
         purpose: "university_learning_os",
         level,
         projects: "0",
@@ -93,13 +98,13 @@ export default function Onboarding() {
         interest: answers.branch,
         goal: answers.subjects.join(", "),
         time_commitment: `${answers.dailyMinutes} mins/day`,
-      }]);
+      };
+      await supabase.from("profiles").insert([profileBase]);
 
       const res = await fetch("/api/generate-roadmap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: "user-1",
           level,
           interest: answers.branch,
           goal: answers.subjects.join(", "),
@@ -297,7 +302,7 @@ export default function Onboarding() {
                     setAnswers((prev) => ({
                       ...prev,
                       provider: e.target.value,
-                      model: e.target.value === "gemini" ? "gemini-1.5-flash" : "gpt-4o-mini",
+                      model: DEFAULT_CLIENT_MODEL_BY_PROVIDER[e.target.value] || DEFAULT_CLIENT_MODEL_BY_PROVIDER.openai,
                     }))
                   }
                   className="field-input"

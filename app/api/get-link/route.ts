@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DEFAULT_OPENROUTER_MODEL } from "@/lib/ai-config";
 
 export async function POST(req: Request) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-4o-mini",
+        model: DEFAULT_OPENROUTER_MODEL,
         messages: [
           {
             role: "user",
@@ -51,7 +52,7 @@ if (platform === "youtube") {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "openai/gpt-4o-mini",
+          model: DEFAULT_OPENROUTER_MODEL,
           messages: [
             {
               role: "user",
@@ -131,7 +132,7 @@ if (platform === "leetcode") {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "openai/gpt-4o-mini",
+      model: DEFAULT_OPENROUTER_MODEL,
       messages: [
         {
           role: "user",

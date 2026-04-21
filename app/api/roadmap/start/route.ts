@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getAuthenticatedUserId } from "@/lib/auth-user";
 
 export async function POST(req: Request) {
   try {
-    const { stepId, userId = "user-1" } = await req.json();
+    const { stepId } = await req.json();
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const today = new Date().toISOString().slice(0, 10);
 
     const { data: existing } = await supabaseServer

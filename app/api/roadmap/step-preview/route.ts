@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { generateAIText } from "@/lib/ai-provider";
+import { resolveAI } from "@/lib/ai-config";
 
 export async function POST(req: Request) {
   try {
-    const { topic } = await req.json();
+    const { topic, provider, model } = await req.json();
     if (!topic) return NextResponse.json({ error: "topic required" }, { status: 400 });
+    const ai = resolveAI(provider, model);
 
     const prompt = `You are a world-class university tutor creating a quick-preview lesson card.
 
@@ -44,7 +46,12 @@ Quality requirements:
     };
 
     try {
-      const text = await generateAIText({ provider: "openai", prompt, openAIModel: "gpt-4o-mini", geminiModel: "gemini-1.5-flash" });
+      const text = await generateAIText({
+        provider: ai.provider,
+        prompt,
+        openAIModel: ai.provider === "openai" ? ai.model : undefined,
+        geminiModel: ai.provider === "gemini" ? ai.model : undefined,
+      });
       if (text) {
         const parsed = JSON.parse(text);
         return NextResponse.json({

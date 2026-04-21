@@ -37,7 +37,7 @@ export default function ProgressPage() {
       const [tableRes, masteryRes, streakRes] = await Promise.all([
         fetch("/api/progress/table", { cache: "no-store" }),
         fetch("/api/progress/mastery", { cache: "no-store" }),
-        fetch("/api/progress/streak?userId=user-1", { cache: "no-store" }),
+        fetch("/api/progress/streak", { cache: "no-store" }),
       ]);
       const scoreRes = await fetch("/api/progress/score", { cache: "no-store" });
       const tableData = await tableRes.json();
