@@ -37,6 +37,14 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
   const [submitted, setSubmitted] = useState(false);
   const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);
   const [trackingVideoId, setTrackingVideoId] = useState<string | null>(null);
+  const [activeVideo, setActiveVideo] = useState<Video | null>(null);
+  const [embedOrigin, setEmbedOrigin] = useState("http://localhost");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setEmbedOrigin(window.location.origin);
+    }
+  }, []);
 
   // Load notes on open
   useEffect(() => {
@@ -118,13 +126,74 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
     }
   };
 
+  useEffect(() => {
+    if (!activeVideo?.videoId) return;
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const videoId = activeVideo.videoId;
+    const threshold = 0.9;
+
+    const markWatched = async () => {
+      if (!videoId || watchedVideoIds.includes(videoId)) return;
+      await toggleWatched(videoId, true);
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      if (typeof event.data !== "string" || !event.data.includes('"infoDelivery"')) return;
+      try {
+        const parsed = JSON.parse(event.data) as {
+          info?: { currentTime?: number; duration?: number };
+        };
+        const currentTime = Number(parsed?.info?.currentTime || 0);
+        const duration = Number(parsed?.info?.duration || 0);
+        if (duration > 0 && currentTime / duration >= threshold) {
+          markWatched();
+        }
+      } catch {
+        // ignore malformed postMessage payloads
+      }
+    };
+
+    const startPolling = () => {
+      const frame = document.getElementById("yt-embedded-player") as HTMLIFrameElement | null;
+      if (!frame || !frame.contentWindow) return;
+      intervalId = setInterval(() => {
+        frame.contentWindow?.postMessage(
+          JSON.stringify({
+            event: "command",
+            func: "getCurrentTime",
+            args: [],
+          }),
+          "*"
+        );
+        frame.contentWindow?.postMessage(
+          JSON.stringify({
+            event: "command",
+            func: "getDuration",
+            args: [],
+          }),
+          "*"
+        );
+      }, 1500);
+    };
+
+    window.addEventListener("message", handleMessage);
+    const timeoutId = setTimeout(startPolling, 600);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [activeVideo, watchedVideoIds]);
+
   const correctCount = submitted ? quiz.reduce((acc, q, i) => (answers[i] === q.answerIndex ? acc + 1 : acc), 0) : 0;
+  const trackableVideoIds = videos
+    .map((video) => video.videoId || "")
+    .filter((id): id is string => Boolean(id));
   const allCurrentVideosWatched =
-    videos.length > 0 &&
-    videos
-      .map((video) => video.videoId || "")
-      .filter((id): id is string => Boolean(id))
-      .every((id) => watchedVideoIds.includes(id));
+    trackableVideoIds.length > 0 &&
+    trackableVideoIds.every((id) => watchedVideoIds.includes(id));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
@@ -249,12 +318,14 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
                   <div className={`text-xs px-3 py-2 rounded border ${allCurrentVideosWatched ? "bg-emerald-950/40 border-emerald-700 text-emerald-300" : "bg-zinc-900 border-zinc-700 text-zinc-400"}`}>
                     {allCurrentVideosWatched
                       ? "All recommended videos marked as watched."
-                      : `${watchedVideoIds.length}/${videos.filter((v) => Boolean(v.videoId)).length} videos marked as watched.`}
+                      : `${watchedVideoIds.length}/${trackableVideoIds.length} videos marked as watched.`}
                   </div>
                   {videos.map((v, i) => (
                     <div key={i} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
-                      <a href={v.url} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-3 hover:bg-zinc-800 rounded-lg transition group">
+                      <button
+                        onClick={() => setActiveVideo(v)}
+                        className="w-full text-left flex items-center gap-3 hover:bg-zinc-800 rounded-lg transition group"
+                      >
                       {v.thumbnail ? (
                         <div className="relative shrink-0 w-24 h-16 rounded overflow-hidden">
                           <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
@@ -278,18 +349,26 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
                         </div>
                       </div>
                       <ExternalLink size={14} className="text-zinc-600 group-hover:text-zinc-400 transition shrink-0" />
-                      </a>
+                      </button>
+                      <div className="mt-2 flex justify-between items-center">
+                        <a
+                          href={v.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-indigo-300 hover:text-indigo-200"
+                        >
+                          Open on YouTube
+                        </a>
                       {v.videoId && (
-                        <div className="mt-2 flex justify-end">
-                          <button
-                            onClick={() => toggleWatched(v.videoId as string, !watchedVideoIds.includes(v.videoId as string))}
-                            disabled={trackingVideoId === v.videoId}
-                            className="text-xs px-2 py-1 rounded border border-zinc-700 text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
-                          >
-                            {watchedVideoIds.includes(v.videoId) ? "Mark as not watched" : "Mark as watched"}
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => toggleWatched(v.videoId as string, !watchedVideoIds.includes(v.videoId as string))}
+                          disabled={trackingVideoId === v.videoId}
+                          className="text-xs px-2 py-1 rounded border border-zinc-700 text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+                        >
+                          {watchedVideoIds.includes(v.videoId) ? "Mark as not watched" : "Mark as watched"}
+                        </button>
                       )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -354,6 +433,33 @@ export default function StepDetailPanel({ step, onClose, onStart, startingId }: 
           )}
         </div>
       </div>
+      {activeVideo?.videoId && (
+        <div className="absolute inset-0 bg-black/90 z-20 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-zinc-950 border border-zinc-700 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between p-3 border-b border-zinc-800">
+              <p className="text-sm text-zinc-200 truncate pr-3">{activeVideo.title}</p>
+              <button onClick={() => setActiveVideo(null)} className="text-zinc-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="aspect-video bg-black">
+              <iframe
+                id="yt-embedded-player"
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/${activeVideo.videoId}?enablejsapi=1&origin=${encodeURIComponent(embedOrigin)}&rel=0`}
+                title={activeVideo.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+            <div className="p-3 text-xs text-zinc-400">
+              Auto-marks watched after ~90% playback.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
