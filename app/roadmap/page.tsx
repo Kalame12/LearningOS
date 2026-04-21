@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import RoadmapGraph from "@/components/RoadmapGraph";
-import ResourcePanel from "@/components/ResourcePanel";
-import { Pencil, Check, Play } from "lucide-react";
+import StepDetailPanel from "@/components/StepDetailPanel";
+import { Pencil, Check } from "lucide-react";
 
 type Session = { id: string; subject: string; level: string; created_at: string };
 
@@ -29,10 +29,20 @@ export default function RoadmapPage() {
         const { data } = await supabase
           .from("roadmap_sessions")
           .select("id, subject, level, created_at")
-          .order("created_at", { ascending: true });
-        const list = (data || []) as Session[];
-        setSessions(list);
-        if (list.length > 0) setActiveSessionId(list[0].id);
+          .order("created_at", { ascending: false }); // newest first
+
+        const all = (data || []) as Session[];
+
+        // Deduplicate: keep only the latest session per subject
+        const seen = new Map<string, Session>();
+        for (const s of all) {
+          const key = (s.subject || "General").toLowerCase().trim();
+          if (!seen.has(key)) seen.set(key, s);
+        }
+        const unique = Array.from(seen.values());
+
+        setSessions(unique);
+        if (unique.length > 0) setActiveSessionId(unique[0].id);
       } catch (err) {
         console.error(err);
       }
@@ -114,21 +124,20 @@ export default function RoadmapPage() {
               </>
             ) : (
               <button onClick={() => setEditMode(true)} className="btn-ghost text-sm flex items-center gap-1.5">
-                <Pencil size={14} /> Edit Roadmap
+                <Pencil size={14} /> Edit Steps
               </button>
             )}
           </div>
         </div>
 
         {loading && <p className="text-zinc-400">Loading roadmaps...</p>}
-
         {!loading && sessions.length === 0 && (
           <p className="text-zinc-500">No roadmap found. Complete onboarding first.</p>
         )}
 
         {!loading && sessions.length > 0 && (
           <>
-            {/* Subject tabs */}
+            {/* Subject tabs — one per unique subject */}
             <div className="flex flex-wrap gap-2 mb-6 border-b border-zinc-800 pb-4">
               {sessions.map((session) => {
                 const isActive = session.id === activeSessionId;
@@ -149,7 +158,7 @@ export default function RoadmapPage() {
             </div>
 
             {/* Progress bar */}
-            {activeSession && (
+            {activeSession && steps.length > 0 && (
               <div className="mb-6">
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-zinc-400">{activeSession.subject}</span>
@@ -166,7 +175,7 @@ export default function RoadmapPage() {
 
             {stepsLoading && <p className="text-zinc-400">Loading steps...</p>}
 
-            {/* Edit mode: flat list with inputs */}
+            {/* Edit mode */}
             {!stepsLoading && steps.length > 0 && editMode && (
               <div className="space-y-3">
                 {steps.map((step, idx) => (
@@ -174,9 +183,7 @@ export default function RoadmapPage() {
                     <span className="text-zinc-500 text-sm w-6 shrink-0">{idx + 1}</span>
                     <input
                       value={editedTitles[step.id] ?? step.step}
-                      onChange={(e) =>
-                        setEditedTitles((prev) => ({ ...prev, [step.id]: e.target.value }))
-                      }
+                      onChange={(e) => setEditedTitles((prev) => ({ ...prev, [step.id]: e.target.value }))}
                       className="field-input flex-1"
                     />
                     <span className={`badge shrink-0 text-xs ${step.status === "completed" ? "border-emerald-700 text-emerald-400" : "border-zinc-700 text-zinc-400"}`}>
@@ -187,27 +194,45 @@ export default function RoadmapPage() {
               </div>
             )}
 
-            {/* View mode: graph + step list with Start buttons */}
+            {/* View mode — visual graph + clickable step list */}
             {!stepsLoading && steps.length > 0 && !editMode && (
               <>
-                <RoadmapGraph steps={steps} onStepClick={handleStart} />
+                <RoadmapGraph steps={steps} onStepClick={(step) => setPanelStep(step)} />
+
                 <div className="mt-6 space-y-2">
-                  <h2 className="text-sm text-zinc-500 uppercase tracking-wider mb-3">Steps</h2>
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">
+                    {steps.length} steps · click any step to preview notes, videos & quiz
+                  </p>
                   {steps.map((step, idx) => (
-                    <div key={step.id} className="card flex items-center gap-4 py-3">
-                      <span className="text-zinc-500 text-sm w-6 shrink-0">{idx + 1}</span>
-                      <button onClick={() => setPanelStep(step)} className="flex-1 text-sm text-left hover:text-indigo-300 transition">{step.step}</button>
-                      <span className={`badge shrink-0 text-xs ${step.status === "completed" ? "border-emerald-700 text-emerald-400" : "border-zinc-700 text-zinc-500"}`}>
-                        {step.status}
-                      </span>
-                      <button
-                        onClick={() => handleStart(step)}
-                        disabled={startingId === step.id}
-                        className="btn-primary text-xs px-3 py-1.5 shrink-0 flex items-center gap-1"
-                      >
-                        <Play size={12} /> {startingId === step.id ? "..." : "Start"}
-                      </button>
-                    </div>
+                    <button
+                      key={step.id}
+                      onClick={() => setPanelStep(step)}
+                      className="w-full card flex items-center gap-4 py-3 text-left hover:border-indigo-700 transition group"
+                    >
+                      {/* Status indicator */}
+                      <div className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold border ${
+                        step.status === "completed"
+                          ? "bg-emerald-600/20 border-emerald-600 text-emerald-300"
+                          : "bg-zinc-800 border-zinc-700 text-zinc-500"
+                      }`}>
+                        {step.status === "completed" ? "✓" : idx + 1}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white group-hover:text-indigo-300 transition truncate">{step.step}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">{step.domain} · {step.platform}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`badge text-xs ${
+                          step.type === "practice" ? "border-amber-700 text-amber-400" :
+                          step.type === "revise" ? "border-purple-700 text-purple-400" :
+                          "border-zinc-700 text-zinc-500"
+                        }`}>{step.type}</span>
+                        <span className="text-xs text-zinc-600">{step.estimated_minutes || step.estimatedMinutes || 45}m</span>
+                        <span className="text-xs text-zinc-600 group-hover:text-indigo-400 transition">→</span>
+                      </div>
+                    </button>
                   ))}
                 </div>
               </>
@@ -215,7 +240,15 @@ export default function RoadmapPage() {
           </>
         )}
       </div>
-      {panelStep && <ResourcePanel step={panelStep} onClose={() => setPanelStep(null)} />}
+
+      {panelStep && (
+        <StepDetailPanel
+          step={panelStep}
+          onClose={() => setPanelStep(null)}
+          onStart={(step) => { setPanelStep(null); handleStart(step); }}
+          startingId={startingId}
+        />
+      )}
     </main>
   );
 }

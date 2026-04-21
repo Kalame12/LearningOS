@@ -65,29 +65,46 @@ export async function POST(req: Request) {
       `✅ Lesson ready`,
     ];
 
-    const prompt = `You are a concise tutor.
-Topic: ${task.topic}
-Task type: ${task.task_type}
-${recentAccuracy !== null && recentAccuracy < 0.6 ? `Note: Student struggled recently (${Math.round(recentAccuracy * 100)}% accuracy) — include prerequisite context.` : ""}
+    const isRevision = task.task_type === "revise";
+    const isStruggling = recentAccuracy !== null && recentAccuracy < 0.6;
 
-Return ONLY a strict JSON object (no markdown fences):
+    const prompt = `You are a world-class university tutor creating a high-quality lesson for a student.
+
+Topic: "${task.topic}"
+Session type: ${isRevision ? "Revision — reinforce and test recall" : "New lesson — explain, demonstrate, connect"}
+${isStruggling ? `⚠ Student scored ${Math.round(recentAccuracy! * 100)}% on recent attempts — start with prerequisite context before the main content.` : ""}
+
+Your output MUST be a single valid JSON object (no markdown fences, no comments):
 {
-  "markdownLesson": "...",
-  "summary": "...",
-  "cues": ["Question 1?", "Question 2?", "Question 3?"],
-  "mainNotes": "main lesson content in markdown",
-  "examples": ["short example 1", "short example 2"],
-  "keyTerms": [{"term": "...", "definition": "..."}],
+  "markdownLesson": "Full lesson in markdown with headers, bold key terms, and code blocks where relevant",
+  "summary": "1-2 sentence TL;DR the student can say out loud",
+  "cues": [
+    "Precise question a student should answer after reading (not yes/no)",
+    "Second cue question",
+    "Third cue question"
+  ],
+  "mainNotes": "Detailed explanation in markdown — use ## headers, bullet points, inline code. 200-300 words. Explain the WHY not just the WHAT.",
+  "examples": [
+    "Concrete code snippet or worked example 1 (as a string, use \\n for newlines)",
+    "Concrete code snippet or worked example 2"
+  ],
+  "keyTerms": [
+    {"term": "exact technical term", "definition": "one-sentence plain-English definition"},
+    {"term": "second term", "definition": "definition"}
+  ],
   "quiz": [
-    {"question":"...", "options":["A","B","C","D"], "answerIndex":0}
+    {"question": "Specific question testing understanding (not memorisation)", "options": ["Option A", "Option B", "Option C", "Option D"], "answerIndex": 0},
+    {"question": "Question 2", "options": ["A", "B", "C", "D"], "answerIndex": 2},
+    {"question": "Question 3 — application/scenario based", "options": ["A", "B", "C", "D"], "answerIndex": 1}
   ]
 }
 
-Rules:
-- Beginner-friendly, 180-250 words for mainNotes.
-- Exactly 3 cues (questions a student should be able to answer after this lesson).
-- Exactly 3 quiz questions. answerIndex between 0 and 3.
-- summary is 1-2 sentences.`;
+Quality rules:
+- mainNotes: explain intuitively — use analogies, real-world context
+- examples: prefer runnable code snippets or step-by-step worked examples
+- quiz: test actual understanding, not trivia — make wrong options plausible
+- keyTerms: 2-4 terms maximum, only the truly essential vocabulary
+- cues: frame as "How does X work?", "When would you use Y over Z?" style questions`;
 
     let markdownLesson = `## ${task.topic}\n\nThis lesson introduces the key idea in a practical way and prepares you for short retrieval practice.`;
     let summary = `Quick overview of ${task.topic}`;

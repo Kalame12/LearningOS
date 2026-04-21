@@ -53,19 +53,42 @@ export async function POST(req: Request) {
       dailyMinutes: Number(dailyMinutes) || 90,
     };
 
-    const subjectList: string[] =
+    const rawSubjects: string[] =
       Array.isArray(subjects) && subjects.length > 0
         ? subjects
         : [goal || interest || "General Learning"];
 
+    // Deduplicate subjects (case-insensitive)
+    const seen = new Set<string>();
+    const subjectList = rawSubjects.filter((s) => {
+      const key = s.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return key !== "" && key !== "general learning";
+    });
+    if (subjectList.length === 0) subjectList.push(goal || interest || "General Learning");
+
     const allRoadmaps: any[] = [];
 
     for (const subject of subjectList) {
+      // Delete old sessions for same subject + user to avoid duplicate tabs
+      const { data: oldSessions } = await supabase
+        .from("roadmap_sessions")
+        .select("id")
+        .eq("user_id", baseProfile.userId)
+        .ilike("subject", subject.trim());
+
+      if (oldSessions && oldSessions.length > 0) {
+        const oldIds = oldSessions.map((s: any) => s.id);
+        await supabase.from("roadmap").delete().in("session_id", oldIds);
+        await supabase.from("roadmap_sessions").delete().in("id", oldIds);
+      }
+
       const roadmap = await generateRoadmapForSubject(baseProfile, subject, provider, model);
 
       const { data: session } = await supabase
         .from("roadmap_sessions")
-        .insert([{ user_id: baseProfile.userId, level: currentLevel, subject }])
+        .insert([{ user_id: baseProfile.userId, level: currentLevel, subject: subject.trim() }])
         .select()
         .single();
 

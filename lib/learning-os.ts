@@ -29,31 +29,40 @@ const fallbackTopics = [
 ];
 
 export function buildRoadmapPrompt(profile: StudentProfileInput): string {
-  const subjectsLine =
-    profile.subjects && profile.subjects.length > 0
-      ? `Specific topics to cover: ${profile.subjects.join(", ")}`
-      : "";
+  const subject = profile.subjects?.[0] || profile.goal;
+  const stepCount = Math.min(12, Math.max(8, Math.round((profile.semesterWeeks || 16) / 2)));
 
-  return `Create a semester roadmap for a university student.
+  return `You are an expert curriculum designer. Create a practical, structured learning roadmap for a university student.
 
-Goal: ${profile.goal}
-Interest track: ${profile.interest}
-Current level: ${profile.currentLevel}
-Semester duration in weeks: ${profile.semesterWeeks}
-Daily study minutes: ${profile.dailyMinutes}
-${subjectsLine}
+Subject: ${subject}
+Student level: ${profile.currentLevel}
+Semester: ${profile.semesterWeeks} weeks  |  Daily study: ${profile.dailyMinutes} min/day
 
-Output rules:
-- Return ONLY a JSON array with 6 objects.
-- Each object must include:
-  - step (string) — name it after one of the specific topics listed above when possible
-  - type ("learn" | "practice" | "revise")
-  - domain (string)
-  - platform (string, suggest one source)
-  - estimatedMinutes (number)
-  - prerequisites (string array, can be empty)
-- Order the steps for progressive learning.
-- Keep names concise and student-friendly.`;
+Design a ${stepCount}-step roadmap that:
+1. Starts from ${profile.currentLevel} level — skip redundant basics if intermediate/advanced
+2. Each step is a concrete, actionable topic (NOT vague like "Introduction" or "Advanced Concepts")
+3. Builds progressively — each step unlocks the next
+4. Mixes theory (learn), hands-on coding/projects (practice), and spaced review (revise) in a 50/30/20 ratio
+5. Names steps SPECIFICALLY: "Binary Search Trees: Insert & Delete" not "Data Structures"
+6. Picks the single best free platform/resource per step
+
+Return ONLY a valid JSON array — no markdown, no explanation, no wrapper:
+[
+  {
+    "step": "Specific topic name",
+    "type": "learn",
+    "domain": "sub-domain",
+    "platform": "Best free resource",
+    "estimatedMinutes": 45,
+    "prerequisites": []
+  }
+]
+
+Constraints:
+- Exactly ${stepCount} steps
+- No step named just "General", "Introduction", "Overview", or "Basics" without a specific qualifier
+- estimatedMinutes between 30 and 90
+- prerequisites: exact step names from earlier in the array only`;
 }
 
 export function parseRoadmap(rawText: string): RoadmapStep[] {
