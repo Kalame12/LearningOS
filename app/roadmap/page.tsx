@@ -26,6 +26,7 @@ export default function RoadmapPage() {
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingEditId, setSavingEditId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<Step>>({});
 
   useEffect(() => {
@@ -45,24 +46,6 @@ export default function RoadmapPage() {
     setActiveId(step.id);
 
     try {
-      const res = await fetch("/api/get-link", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: step.platform,
-          difficulty: step.difficulty,
-          stepText: step.step,
-        }),
-      });
-
-      const data = await res.json();
-
-      console.log("API RESPONSE:", data);
-
-      // Keep users in-app: do not open external tabs from roadmap clicks.
-
       const startRes = await fetch("/api/roadmap/start-step", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,7 +58,8 @@ export default function RoadmapPage() {
         return;
       }
 
-      await fetch("/api/roadmap/complete", {
+      // Do not block navigation on completion write.
+      fetch("/api/roadmap/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stepId: step.id }),
@@ -102,6 +86,7 @@ export default function RoadmapPage() {
   };
 
   const saveEdit = async (stepId: string) => {
+    setSavingEditId(stepId);
     const res = await fetch("/api/roadmap/update-step", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -116,6 +101,7 @@ export default function RoadmapPage() {
     const payload = await res.json();
     if (!res.ok || !payload.step) {
       alert(payload.message || "Could not update step");
+      setSavingEditId(null);
       return;
     }
     setGroups((prev) =>
@@ -126,6 +112,7 @@ export default function RoadmapPage() {
     );
     setEditingId(null);
     setEditDraft({});
+    setSavingEditId(null);
   };
 
   return (
@@ -176,7 +163,9 @@ export default function RoadmapPage() {
                             onChange={(e) => setEditDraft((prev) => ({ ...prev, domain: e.target.value }))}
                           />
                           <div className="flex gap-2">
-                            <button className="btn-primary" onClick={() => saveEdit(step.id)}>Save</button>
+                            <button className="btn-primary" onClick={() => saveEdit(step.id)} disabled={savingEditId === step.id}>
+                              {savingEditId === step.id ? "Saving..." : "Save"}
+                            </button>
                             <button className="btn-ghost" onClick={() => setEditingId(null)}>Cancel</button>
                           </div>
                         </div>
@@ -190,7 +179,9 @@ export default function RoadmapPage() {
                           </div>
                           <div className="flex gap-2">
                             <button className="btn-ghost" onClick={() => startEdit(step)}>Edit</button>
-                            <button className="btn-primary" onClick={() => handleStepClick(step)}>Open</button>
+                            <button className="btn-primary" onClick={() => handleStepClick(step)} disabled={activeId === step.id}>
+                              {activeId === step.id ? "Opening..." : "Open"}
+                            </button>
                           </div>
                         </div>
                       )}

@@ -15,6 +15,8 @@ export async function POST(req: Request) {
       timeSpentMinutes,
       notesMarkdown,
       notesSummary,
+      reflectionCanExplain,
+      reflectionBlocker,
     } = await req.json();
     const userId = await getAuthenticatedUserId();
     if (!userId) {
@@ -95,6 +97,36 @@ export async function POST(req: Request) {
         topic: task.topic,
         markdown_content: notesMarkdown,
         summary: notesSummary,
+      },
+    ]);
+
+    // Best-effort reflection persistence.
+    await supabaseServer.from("learning_reflections").insert([
+      {
+        user_id: userId,
+        task_id: taskId,
+        topic: task.topic,
+        confidence: Number(confidence || 3),
+        can_explain: Boolean(reflectionCanExplain),
+        blocker_text: reflectionBlocker || null,
+      },
+    ]);
+
+    // Best-effort event logging.
+    await supabaseServer.from("learning_events").insert([
+      {
+        user_id: userId,
+        event_type: "task_completed",
+        topic: task.topic,
+        task_id: taskId,
+        metadata: {
+          correctCount: Number(correctCount || 0),
+          totalCount: Number(totalCount || 0),
+          hintsUsed: Number(hintsUsed || 0),
+          skippedCount: Number(skippedCount || 0),
+          confidence: Number(confidence || 3),
+          timeSpentMinutes: Number(timeSpentMinutes || 0),
+        },
       },
     ]);
 

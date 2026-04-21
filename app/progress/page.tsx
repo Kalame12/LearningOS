@@ -26,6 +26,7 @@ export default function ProgressPage() {
   const [rows, setRows] = useState<ProgressRow[]>([]);
   const [mastery, setMastery] = useState<MasteryRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [score, setScore] = useState<{ completionScore: number; breakdown: Record<string, number> } | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -33,10 +34,13 @@ export default function ProgressPage() {
         fetch("/api/progress/table", { cache: "no-store" }),
         fetch("/api/progress/mastery", { cache: "no-store" }),
       ]);
+      const scoreRes = await fetch("/api/progress/score", { cache: "no-store" });
       const tableData = await tableRes.json();
       const masteryData = await masteryRes.json();
+      const scoreData = await scoreRes.json();
       setRows(tableData.rows || []);
       setMastery(masteryData.mastery || []);
+      setScore(scoreData);
       setLoading(false);
     };
     run();
@@ -55,6 +59,10 @@ export default function ProgressPage() {
           <>
             <div className="grid md:grid-cols-3 gap-3 mb-8">
               <div className="card py-4">
+                <p className="text-xs text-zinc-400">Roadmap Completion Score</p>
+                <p className="text-2xl font-semibold">{score?.completionScore ?? 0}%</p>
+              </div>
+              <div className="card py-4">
                 <p className="text-xs text-zinc-400">Tracked Attempts</p>
                 <p className="text-2xl font-semibold">{rows.length}</p>
               </div>
@@ -67,6 +75,16 @@ export default function ProgressPage() {
                 <p className="text-2xl font-semibold">{mastery.filter((m) => m.mastery_score < 0.55).length}</p>
               </div>
             </div>
+
+            {score && (
+              <div className="card mb-8">
+                <p className="text-sm text-zinc-300 mb-2">Score breakdown</p>
+                <p className="text-xs text-zinc-400">
+                  Task {score.breakdown.taskCompletion}% • Quiz {score.breakdown.quizScore}% •
+                  Consistency {score.breakdown.consistency}% • Reflection {score.breakdown.reflectionCompletion}%
+                </p>
+              </div>
+            )}
 
             <section className="mb-8">
               <h2 className="text-xl font-semibold mb-3">Topic Mastery (0-1)</h2>

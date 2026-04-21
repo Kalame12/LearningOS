@@ -1,144 +1,139 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import ReactFlow, { Background, Controls } from "reactflow";
-import "reactflow/dist/style.css";
+type Step = {
+  id: string;
+  step: string;
+  type: string;
+  domain: string;
+  platform: string;
+  status: string;
+};
 
-export default function RoadmapGraph({ steps, onStepClick }: any) {
-  const [nodes, setNodes] = useState<any[]>([]);
-  const [edges, setEdges] = useState<any[]>([]);
+type Props = {
+  steps: Step[];
+  onStepClick: (step: Step) => void;
+};
 
-  const currentIndex = steps.findIndex(
-    (s: any) => s.status !== "completed"
-  );
+export default function RoadmapGraph({ steps, onStepClick }: Props) {
+  const ordered = [...steps];
+  const levels: Step[][] = [];
+  let cursor = 0;
+  let width = 1;
+  while (cursor < ordered.length) {
+    levels.push(ordered.slice(cursor, cursor + width));
+    cursor += width;
+    width *= 2;
+  }
 
-  useEffect(() => {
-    if (!steps.length) return;
+  const nodeWidth = 180;
+  const nodeHeight = 64;
+  const colGap = 56;
+  const rowGap = 74;
+  const padX = 36;
+  const padY = 24;
 
-    let tempNodes: any[] = [];
-    let tempEdges: any[] = [];
+  const maxCols = Math.max(...levels.map((l) => l.length), 1);
+  const svgWidth = padX * 2 + maxCols * nodeWidth + (maxCols - 1) * colGap;
+  const svgHeight = padY * 2 + levels.length * nodeHeight + (levels.length - 1) * rowGap;
 
-    // 🔥 RESET before animation
-    setNodes([]);
-    setEdges([]);
-
-    // 🚀 START NODE
-    tempNodes.push({
-      id: "start",
-      position: { x: -180, y: 160 },
-      data: { label: "🚀 Start" },
-      style: {
-        background: "#2563eb",
-        color: "white",
-        padding: 10,
-        borderRadius: 10,
-      },
+  const positions = new Map<string, { x: number; y: number; index: number }>();
+  let absoluteIndex = 0;
+  levels.forEach((level, levelIndex) => {
+    const totalLevelWidth = level.length * nodeWidth + Math.max(0, level.length - 1) * colGap;
+    const startX = (svgWidth - totalLevelWidth) / 2;
+    const y = padY + levelIndex * (nodeHeight + rowGap);
+    level.forEach((step, i) => {
+      const x = startX + i * (nodeWidth + colGap);
+      positions.set(step.id, { x, y, index: absoluteIndex });
+      absoluteIndex += 1;
     });
+  });
 
-    tempEdges.push({
-      id: `start-${steps[0].id}`,
-      source: "start",
-      target: steps[0].id,
-      type: "smoothstep",
-      animated: true,
-      style: {
-        stroke: "#888",
-        strokeDasharray: "5 5",
-      },
-    });
-
-    steps.forEach((step: any, index: number) => {
-      setTimeout(() => {
-        const isCompleted = step.status === "completed";
-        const isCurrent = index === currentIndex;
-       const isLocked = index > currentIndex && !isCompleted;
-
-        // 🎯 ZIG-ZAG ROADMAP (clean path)
-        const position = {
-          x: index * 260,
-          y: index % 2 === 0 ? 100 : 220,
-        };
-
-        tempNodes.push({
-          id: step.id,
-          position,
-
-          data: {
-            label: (
-              <div
-                onClick={() => {
-                  if (!isLocked) onStepClick(step);
-                }}
-                style={{
-                  cursor: isLocked ? "not-allowed" : "pointer",
-                  opacity: isLocked ? 0.5 : 1,
-                  transition: "transform 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLocked)
-                    e.currentTarget.style.transform = "scale(1.05)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "scale(1)";
-                }}
-              >
-                {isCompleted ? "✓ " : ""}
-                {step.step}
-                {isLocked && " 🔒"}
-              </div>
-            ),
-          },
-
-          style: {
-            background: isCompleted
-              ? "#22c55e"
-              : isCurrent
-              ? "#eab308"
-              : "#1f2937",
-            color: "white",
-            padding: 12,
-            borderRadius: 12,
-            border: isCurrent
-              ? "2px solid #facc15"
-              : "1px solid #374151",
-            boxShadow: isCurrent
-              ? "0 0 20px rgba(250,204,21,0.5)"
-              : "none",
-          },
-        });
-
-        // 🔗 CONNECT PREVIOUS NODE
-        if (index > 0) {
-          tempEdges.push({
-            id: `e-${steps[index - 1].id}-${step.id}`,
-            source: steps[index - 1].id,
-            target: step.id,
-            type: "smoothstep",
-            animated: true,
-            style: {
-              stroke: "#888",
-              strokeDasharray: "5 5",
-            },
-          });
-        }
-
-        setNodes([...tempNodes]);
-        setEdges([...tempEdges]);
-      }, index * 350); // smoother animation
-    });
-  }, [steps, currentIndex, onStepClick]);
+  const getStrokePath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const startX = from.x + nodeWidth / 2;
+    const startY = from.y + nodeHeight;
+    const endX = to.x + nodeWidth / 2;
+    const endY = to.y;
+    const midY = (startY + endY) / 2;
+    return `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+  };
 
   return (
-    <div className="w-full h-[600px] flex justify-center items-center">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-      >
-        <Background />
-        <Controls />
-      </ReactFlow>
+    <div className="card p-4 overflow-x-auto">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-sm font-semibold text-zinc-200">Roadmap Tree</span>
+        <span className="text-xs text-zinc-500">(NeetCode-style)</span>
+      </div>
+      <div className="min-w-[860px]">
+        <svg width={svgWidth} height={svgHeight} className="mx-auto">
+          {ordered.map((step, idx) => {
+            if (idx === 0) return null;
+            const parentIndex = Math.floor((idx - 1) / 2);
+            const parent = ordered[parentIndex];
+            if (!parent) return null;
+            const from = positions.get(parent.id);
+            const to = positions.get(step.id);
+            if (!from || !to) return null;
+            return (
+              <path
+                key={`edge-${parent.id}-${step.id}`}
+                d={getStrokePath(from, to)}
+                fill="none"
+                stroke="#d4d4d8"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+            );
+          })}
+
+          {ordered.map((step) => {
+            const pos = positions.get(step.id);
+            if (!pos) return null;
+            const completed = step.status === "completed";
+            const bg = completed ? "#3b82f6" : "#a855f7";
+            return (
+              <g key={step.id} onClick={() => onStepClick(step)} style={{ cursor: "pointer" }}>
+                <rect
+                  x={pos.x}
+                  y={pos.y}
+                  rx={10}
+                  ry={10}
+                  width={nodeWidth}
+                  height={nodeHeight}
+                  fill={bg}
+                  stroke={completed ? "#93c5fd" : "#d8b4fe"}
+                  strokeWidth={1.5}
+                />
+                <text
+                  x={pos.x + nodeWidth / 2}
+                  y={pos.y + 25}
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  fontSize={12}
+                  fontWeight={700}
+                >
+                  {truncate(step.step, 26)}
+                </text>
+                <rect
+                  x={pos.x + 16}
+                  y={pos.y + 42}
+                  rx={4}
+                  ry={4}
+                  width={nodeWidth - 32}
+                  height={7}
+                  fill="#93c5fd"
+                  opacity={0.95}
+                />
+              </g>
+            );
+          })}
+        </svg>
+      </div>
     </div>
   );
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
 }

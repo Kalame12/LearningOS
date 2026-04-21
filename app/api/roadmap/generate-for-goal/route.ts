@@ -79,7 +79,36 @@ export async function POST(req: Request) {
     }));
 
     if (rows.length > 0) {
-      await supabaseServer.from("roadmap").insert(rows);
+      const { data: insertedRows } = await supabaseServer.from("roadmap").insert(rows).select("*");
+
+      if (insertedRows && insertedRows.length > 0) {
+        for (const row of insertedRows) {
+          try {
+            const query = `${row.step} ${goal.goal_text} tutorial`;
+            const ytRes = await fetch(
+              `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(
+                query
+              )}&type=video&maxResults=1&key=${process.env.YOUTUBE_API_KEY}`
+            );
+            const ytData = await ytRes.json();
+            const item = ytData?.items?.[0];
+            if (!item) continue;
+
+            // Best-effort table for recommendations (optional migration).
+            await supabaseServer.from("roadmap_resources").insert([
+              {
+                roadmap_id: row.id,
+                resource_type: "youtube",
+                title: item.snippet.title,
+                url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+                quality_score: 0.8,
+              },
+            ]);
+          } catch {
+            // Ignore recommendation failures, roadmap stays usable.
+          }
+        }
+      }
     }
 
     return NextResponse.json({ roadmap, goalId, provider });

@@ -87,6 +87,37 @@ create table if not exists goals (
   created_at timestamptz not null default now()
 );
 
+create table if not exists learning_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  event_type text not null,
+  topic text null,
+  task_id uuid null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists learning_reflections (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  task_id uuid not null references learning_tasks(id) on delete cascade,
+  topic text not null,
+  confidence int not null default 3,
+  can_explain boolean not null default false,
+  blocker_text text null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists roadmap_resources (
+  id uuid primary key default gen_random_uuid(),
+  roadmap_id uuid not null references roadmap(id) on delete cascade,
+  resource_type text not null,
+  title text not null,
+  url text not null,
+  quality_score numeric not null default 0.5,
+  created_at timestamptz not null default now()
+);
+
 -- For existing databases created before user-scoping:
 alter table goals add column if not exists user_id text;
 create index if not exists idx_goals_user_created on goals(user_id, created_at desc);

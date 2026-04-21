@@ -29,6 +29,8 @@ export default function LearnTaskPage() {
   const [sessionStart, setSessionStart] = useState<number>(Date.now());
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState("gpt-4o-mini");
+  const [canExplain, setCanExplain] = useState(false);
+  const [blocker, setBlocker] = useState("");
 
   useEffect(() => {
     const savedProvider = localStorage.getItem("ai_provider");
@@ -57,6 +59,11 @@ export default function LearnTaskPage() {
         setQuiz(data.lesson.quiz || []);
         setSelectedAnswers(new Array((data.lesson.quiz || []).length).fill(-1));
         setSessionStart(Date.now());
+        await fetch("/api/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventType: "lesson_opened", taskId, topic: data.task.topic }),
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not load lesson");
       } finally {
@@ -90,6 +97,8 @@ export default function LearnTaskPage() {
         timeSpentMinutes,
         notesMarkdown,
         notesSummary,
+        reflectionCanExplain: canExplain,
+        reflectionBlocker: blocker,
       }),
     });
     const data = await res.json();
@@ -210,6 +219,24 @@ export default function LearnTaskPage() {
               <option value={5}>5</option>
             </select>
           </label>
+        </div>
+
+        <div className="card mb-6">
+          <h3 className="font-semibold mb-3">Quick Reflection</h3>
+          <label className="flex items-center gap-2 text-sm mb-3">
+            <input
+              type="checkbox"
+              checked={canExplain}
+              onChange={(e) => setCanExplain(e.target.checked)}
+            />
+            I can explain this topic to a friend
+          </label>
+          <textarea
+            className="field-input min-h-[90px]"
+            placeholder="Biggest blocker (optional)"
+            value={blocker}
+            onChange={(e) => setBlocker(e.target.value)}
+          />
         </div>
 
         <button onClick={handleSubmit} disabled={saving} className="btn-primary">
