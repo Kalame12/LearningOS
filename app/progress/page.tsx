@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import StreakCalendar from "@/components/StreakCalendar";
 
 type ProgressRow = {
   id: string;
@@ -27,19 +28,25 @@ export default function ProgressPage() {
   const [mastery, setMastery] = useState<MasteryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState<{ completionScore: number; breakdown: Record<string, number> } | null>(null);
+  const [streak, setStreak] = useState<{ currentStreak: number; longestStreak: number; days: any[] }>({
+    currentStreak: 0, longestStreak: 0, days: [],
+  });
 
   useEffect(() => {
     const run = async () => {
-      const [tableRes, masteryRes] = await Promise.all([
+      const [tableRes, masteryRes, streakRes] = await Promise.all([
         fetch("/api/progress/table", { cache: "no-store" }),
         fetch("/api/progress/mastery", { cache: "no-store" }),
+        fetch("/api/progress/streak?userId=user-1", { cache: "no-store" }),
       ]);
       const scoreRes = await fetch("/api/progress/score", { cache: "no-store" });
       const tableData = await tableRes.json();
       const masteryData = await masteryRes.json();
+      const streakData = await streakRes.json();
       const scoreData = await scoreRes.json();
       setRows(tableData.rows || []);
       setMastery(masteryData.mastery || []);
+      setStreak({ currentStreak: streakData.currentStreak || 0, longestStreak: streakData.longestStreak || 0, days: streakData.days || [] });
       setScore(scoreData);
       setLoading(false);
     };
@@ -57,6 +64,14 @@ export default function ProgressPage() {
 
         {!loading && (
           <>
+            <div className="mb-8">
+              <StreakCalendar
+                days={streak.days}
+                currentStreak={streak.currentStreak}
+                longestStreak={streak.longestStreak}
+              />
+            </div>
+
             <div className="grid md:grid-cols-3 gap-3 mb-8">
               <div className="card py-4">
                 <p className="text-xs text-zinc-400">Roadmap Completion Score</p>

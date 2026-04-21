@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
-import Providers from "@/components/providers"
+import Providers from "@/components/providers";
+import FloatingChatbot from "@/components/FloatingChatbot";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,6 +36,7 @@ export default function RootLayout({
         <Providers>
           <Navbar />
           <main className="flex-1">{children}</main>
+          <FloatingChatbot />
         </Providers>
 
       </body>
